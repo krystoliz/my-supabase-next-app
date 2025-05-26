@@ -5,7 +5,7 @@ export default function Navbar() {
     return (
     <nav className="flex items-center justify-between p-4 bg-gray-800 text-white">
       {/* Logo and App Title */}
-      <Link href="/dashboard" className="flex items-center space-x-2">
+      <Link href="/" className="flex items-center space-x-2">
         <Image
           src="/logo.svg" // Make sure your logo.svg is in the public directory
           alt="My Flashcards App Logo"
@@ -13,7 +13,7 @@ export default function Navbar() {
           height={32}
           priority
         />
-        <span className="text-xl font-bold">My Flashcards</span>
+        <span className="text-xl font-bold">Neuroflash</span>
       </Link>
 
       {/* Navigation Links */}
