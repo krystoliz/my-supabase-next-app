@@ -18,7 +18,7 @@ export default function Navbar() {
 
       {/* Navigation Links */}
       <div className="flex space-x-6">
-        <Link href="/dashboard" className="hover:text-gray-300">Dashboard</Link>
+        <Link href="/" className="hover:text-gray-300">Dashboard</Link>
         <Link href="/flashcards" className="hover:text-gray-300">Flashcards</Link>
         {/* Placeholder for future Quizzes and Analytics */}
         <span className="text-gray-400 cursor-not-allowed">Quizzes</span>
