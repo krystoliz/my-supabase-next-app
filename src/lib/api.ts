@@ -105,4 +105,14 @@ export const api = {
         body: JSON.stringify({ flashcard_id, quality_of_response }),
       }),
   },
+
+  // --- NEW API CATEGORY FOR LLM INTEGRATION ---
+  llm: {
+    generateFlashcardsWithLLM: async (prompt: string, setId: string, count: number) =>
+      fetchWithAuth('/api/llm/generate-flashcards-with-llm', { // Corresponds to POST /api/llm/generate-flashcards-with-llm
+        method: 'POST',
+        body: JSON.stringify({ prompt, setId, count }),
+      }),
+  },
+  // --- END NEW API CATEGORY ---
 };
