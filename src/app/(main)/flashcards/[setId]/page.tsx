@@ -1,13 +1,13 @@
 // src/app/(main)/flashcards/[setId]/page.tsx
+// src/app/(main)/flashcards/[setId]/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api } from '../../../../lib/api'; // Adjust path if necessary
-import { supabase } from '../../../../lib/supabaseClient'; // Adjust path if necessary
+import { api } from '../../../../lib/api';
+import { supabase } from '../../../../lib/supabaseClient';
 import Link from 'next/link';
 
-// Define types for Flashcard and FlashcardSet (simplified for this page)
 interface Flashcard {
   id: string;
   set_id: string;
@@ -18,7 +18,7 @@ interface Flashcard {
 }
 
 interface FlashcardSetDetail {
-  id: string;
+  id: number;
   title: string;
   description: string;
   owner_id: string;
@@ -27,7 +27,7 @@ interface FlashcardSetDetail {
 
 export default function FlashcardSetDetailPage() {
   const params = useParams();
-  const setId = params.setId as string; // Get the set ID from the URL
+  const setId = params.setId as string;
   const router = useRouter();
 
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
@@ -39,16 +39,47 @@ export default function FlashcardSetDetailPage() {
   const [addingFlashcard, setAddingFlashcard] = useState(false);
   const [addFlashcardError, setAddFlashcardError] = useState<string | null>(null);
 
-   // State for editing a flashcard
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editedQuestion, setEditedQuestion] = useState('');
   const [editedAnswer, setEditedAnswer] = useState('');
   const [updatingFlashcard, setUpdatingFlashcard] = useState(false);
   const [updateFlashcardError, setUpdateFlashcardError] = useState<string | null>(null);
 
+  // --- Data Fetching Function (No 'token' parameter) ---
+  const fetchSetDetails = useCallback(async () => { // Parameter removed
+    try {
+      setLoading(true);
+      setError(null);
+
+      const setDetail = await api.flashcards.getSets().then(sets =>
+        sets.find((s: { id: number; }) => s.id === parseInt(setId))
+      );
+
+      if (!setDetail) {
+        setError('Flashcard set not found or not accessible.');
+        setLoading(false);
+        return;
+      }
+      setFlashcardSet(setDetail);
+
+      const cards = await api.flashcards.getCardsInSet(setId);
+      setFlashcards(cards);
+
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error('Failed to fetch flashcard set or cards:', err);
+        setError(err.message || 'Failed to load flashcard set.');
+      } else {
+        setError('An unexpected error occurred while loading flashcard set.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [setId]);
+
   // --- Authentication and Initial Data Fetching ---
   useEffect(() => {
-    let authListener: any = null;
+    let authListener: { data: { subscription: { unsubscribe: () => void } } } | null = null;
 
     const setupAuthAndFetch = async () => {
       const { data: { session }, error: getSessionError } = await supabase.auth.getSession();
@@ -59,15 +90,14 @@ export default function FlashcardSetDetailPage() {
         setLoading(false);
         return;
       }
-      
-      // Fetch set details and then cards
-      fetchSetDetails(session.access_token);
+
+      fetchSetDetails(); // <--- REMOVED session.access_token
     };
 
     authListener = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session) {
-          fetchSetDetails(session.access_token);
+          fetchSetDetails(); // <--- REMOVED session.access_token
         }
       } else if (event === 'SIGNED_OUT') {
         setFlashcards([]);
@@ -79,43 +109,11 @@ export default function FlashcardSetDetailPage() {
     setupAuthAndFetch();
 
     return () => {
-      if (authListener && authListener.subscription) {
-        authListener.subscription.unsubscribe();
+      if (authListener && authListener.data && authListener.data.subscription) {
+        authListener.data.subscription.unsubscribe();
       }
     };
-  }, [setId, router]); // Re-run if setId changes
-
-  const fetchSetDetails = async (token: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // First, fetch the specific set to ensure it exists and user has access
-      // Note: Your backend's getSetById (router.get('/:setId')) is protected by owner_id
-      // For public/shared sets, you might need a different backend endpoint or RLS policy.
-      // For now, assuming current user is owner or has direct access based on RLS.
-      const setDetail = await api.flashcards.getSets().then(sets => sets.find((s: any) => s.id === parseInt(setId))); // Crude way to find if only one set is fetched
-      
-      if (!setDetail) {
-          setError('Flashcard set not found or not accessible.');
-          setLoading(false);
-          return;
-      }
-      setFlashcardSet(setDetail);
-
-      // Now fetch cards within that set
-      const cards = await api.flashcards.getCardsInSet(setId);
-      setFlashcards(cards);
-
-    } catch (err: any) {
-      console.error('Failed to fetch flashcard set or cards:', err);
-      setError(err.message || 'Failed to load flashcard set.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  // --- End: Authentication and Initial Data Fetching ---
-
+  }, [setId, router, fetchSetDetails]); // Dependencies remain correct
 
   // --- Handle Adding New Flashcard ---
   const handleAddFlashcard = async (e: React.FormEvent) => {
@@ -131,17 +129,21 @@ export default function FlashcardSetDetailPage() {
 
     try {
       const createdCard = await api.flashcards.createFlashcard(setId, newQuestion, newAnswer);
-      setFlashcards(prevCards => [...prevCards, createdCard]); // Add new card to state
-      setNewQuestion(''); // Clear form
-      setNewAnswer('');   // Clear form
-    } catch (err: any) {
+      setFlashcards(prevCards => [...prevCards, createdCard]);
+      setNewQuestion('');
+      setNewAnswer('');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setAddFlashcardError(err.message || 'Failed to add flashcard.');
+      } else {
+        setAddFlashcardError('An unexpected error occurred while adding the flashcard.');
+      }
       console.error('Failed to add flashcard:', err);
-      setAddFlashcardError(err.message || 'Failed to add flashcard.');
     } finally {
       setAddingFlashcard(false);
     }
   };
-  // --- End: Handle Adding New Flashcard ---
+
   // --- Handle Deleting Flashcard ---
   const handleDeleteFlashcard = async (cardId: string) => {
     if (!window.confirm('Are you sure you want to delete this flashcard? This action cannot be undone.')) {
@@ -150,21 +152,22 @@ export default function FlashcardSetDetailPage() {
 
     try {
       await api.flashcards.deleteFlashcard(setId, cardId);
-      setFlashcards(prevCards => prevCards.filter(card => card.id !== cardId)); // Remove from state
-    } catch (err: any) {
-      console.error('Failed to delete flashcard:', err);
-      setError(err.message || 'Failed to delete flashcard.'); // Display error at page level
+      setFlashcards(prevCards => prevCards.filter(card => card.id !== cardId));
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || 'Failed to delete flashcard.');
+      } else {
+        setError('An unexpected error occurred while deleting the flashcard.');
+      }
     }
   };
-  // --- End: Handle Deleting Flashcard ---
-
 
   // --- Handle Editing Flashcard ---
   const handleEditClick = (card: Flashcard) => {
     setEditingCardId(card.id);
     setEditedQuestion(card.question);
     setEditedAnswer(card.answer);
-    setUpdateFlashcardError(null); // Clear previous errors
+    setUpdateFlashcardError(null);
   };
 
   const handleCancelEdit = () => {
@@ -190,21 +193,22 @@ export default function FlashcardSetDetailPage() {
         cardId,
         { question: editedQuestion, answer: editedAnswer }
       );
-      // Update the flashcards state with the new data
-      setFlashcards(prevCards => 
+      setFlashcards(prevCards =>
         prevCards.map(card => (card.id === cardId ? { ...card, ...updatedCard } : card))
       );
-      setEditingCardId(null); // Exit edit mode
+      setEditingCardId(null);
       setEditedQuestion('');
       setEditedAnswer('');
-    } catch (err: any) {
-      console.error('Failed to update flashcard:', err);
-      setUpdateFlashcardError(err.message || 'Failed to update flashcard.');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setUpdateFlashcardError(err.message || 'Failed to update flashcard.');
+      } else {
+        setUpdateFlashcardError('An unexpected error occurred while updating the flashcard.');
+      }
     } finally {
       setUpdatingFlashcard(false);
     }
   };
-  // --- End: Handle Editing Flashcard ---
 
   if (loading) {
     return <div className="text-center p-8">Loading set details and flashcards...</div>;
@@ -219,7 +223,7 @@ export default function FlashcardSetDetailPage() {
   }
 
   return (
-     <div className="max-w-7xl mx-auto p-4">
+    <div className="max-w-7xl mx-auto p-4">
       <h1 className="text-3xl font-bold mb-2">{flashcardSet.title}</h1>
       <p className="text-gray-600 mb-6">{flashcardSet.description}</p>
 
@@ -228,7 +232,6 @@ export default function FlashcardSetDetailPage() {
         <Link href={`/flashcards/${setId}/study`} className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
           Start Study Session
         </Link>
-        {/* Placeholder for Edit Set button */}
         <button className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors">
           Edit Set
         </button>
@@ -278,7 +281,7 @@ export default function FlashcardSetDetailPage() {
         <h2 className="text-2xl font-semibold mb-4">Flashcards ({flashcards.length})</h2>
         {flashcards.length === 0 && !loading && <p className="text-gray-600">No flashcards in this set yet. Add one above!</p>}
         {updateFlashcardError && <p className="text-red-500 text-sm mb-4">Error updating card: {updateFlashcardError}</p>}
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {flashcards.map((card) => (
             <div key={card.id} className="bg-white p-6 rounded-lg shadow-md border border-gray-200">

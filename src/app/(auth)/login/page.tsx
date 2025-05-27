@@ -30,8 +30,12 @@ export default function LoginPage() {
         // Redirect to dashboard on successful login
         router.push('/');
       }
-    } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred.');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || 'An unexpected error occurred.');
+      } else {
+        setError('An unexpected error occurred.');
+      }
       console.error('Login error:', err);
     } finally {
       setLoading(false);
@@ -77,7 +81,7 @@ export default function LoginPage() {
       </form>
       <div className="mt-6 text-center">
         <p className="text-gray-600">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/signup" className="text-blue-600 hover:underline">
             Daftar
           </Link>
