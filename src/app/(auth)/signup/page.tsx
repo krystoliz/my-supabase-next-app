@@ -42,8 +42,12 @@ export default function SignupPage() {
         // Optionally redirect to a confirmation message page or login
         // router.push('/login?message=check_email');
       }
-    } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred during signup.');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || 'An unexpected error occurred during signup.');
+      } else {
+        setError('An unexpected error occurred during signup.');
+      }
       console.error('Signup error:', err);
     } finally {
       setLoading(false);

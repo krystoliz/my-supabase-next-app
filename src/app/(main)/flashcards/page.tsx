@@ -1,12 +1,12 @@
 // src/app/(main)/flashcards/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // <-- Import useCallback
 import Link from 'next/link';
-import { api } from '../../../lib/api'; // Adjust path if necessary
-import { supabase } from '../../../lib/supabaseClient'; // Adjust path if necessary
+import { api } from '../../../lib/api';
+import { supabase } from '../../../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
-import FlashcardSetCard from '../../../components/flashcards/FlashcardSetCard'; // Adjust path if necessary
+import FlashcardSetCard from '../../../components/flashcards/FlashcardSetCard';
 
 interface FlashcardSet {
   id: string;
@@ -25,9 +25,30 @@ export default function FlashcardSetsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const router = useRouter();
 
-  // --- Authentication and Data Fetching Logic (similar to DashboardPage) ---
+  // --- Data Fetching Logic (Wrapped in useCallback) ---
+  const fetchFlashcardSets = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await api.flashcards.getSets();
+      setFlashcardSets(data);
+    } catch (err: unknown) { // <-- Changed from 'any' to 'unknown'
+      console.error('Failed to fetch flashcard sets:', err);
+      // Type Narrowing for unknown error
+      if (err instanceof Error) {
+        setError(err.message || 'Failed to load flashcard sets.');
+      } else {
+        setError('An unexpected error occurred while loading flashcard sets.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []); // No dependencies for fetchFlashcardSets itself, as it doesn't use props/state directly
+
+  // --- Authentication and Initial Data Fetching Logic ---
   useEffect(() => {
-    let authListener: any = null;
+    // Type authListener correctly
+    let authListener: { data: { subscription: { unsubscribe: () => void } } } | null = null;
 
     const setupAuthAndFetch = async () => {
       const { data: { session }, error: getSessionError } = await supabase.auth.getSession();
@@ -38,7 +59,7 @@ export default function FlashcardSetsPage() {
         setLoading(false);
         return;
       }
-      fetchFlashcardSets();
+      fetchFlashcardSets(); // fetchFlashcardSets is now stable
     };
 
     authListener = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -55,27 +76,11 @@ export default function FlashcardSetsPage() {
     setupAuthAndFetch();
 
     return () => {
-      if (authListener && authListener.subscription) {
-        authListener.subscription.unsubscribe();
+      if (authListener && authListener.data && authListener.data.subscription) {
+        authListener.data.subscription.unsubscribe();
       }
     };
-  }, []);
-
-  const fetchFlashcardSets = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await api.flashcards.getSets();
-      setFlashcardSets(data);
-    } catch (err: any) {
-      console.error('Failed to fetch flashcard sets:', err);
-      setError(err.message || 'Failed to load flashcard sets.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  // --- End: Authentication and Data Fetching Logic ---
-
+  }, [router, fetchFlashcardSets]); // <-- Added router and fetchFlashcardSets to dependencies
 
   // Filter sets based on search term
   const filteredSets = flashcardSets.filter(set =>

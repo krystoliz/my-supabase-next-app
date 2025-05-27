@@ -2,10 +2,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useState, useEffect, useCallback } from 'react'; // <-- Import useCallback
+import { useRouter } from 'next/navigation';
 import { api } from '../../lib/api';
-import { supabase } from '../../lib/supabaseClient'; // Import supabase client
+import { supabase } from '../../lib/supabaseClient';
 import FlashcardSetCard from '../../components/flashcards/FlashcardSetCard';
 
 interface FlashcardSet {
@@ -23,11 +23,36 @@ export default function DashboardPage() {
   const [flashcardSets, setFlashcardSets] = useState<FlashcardSet[]>([]);
   const [loadingSets, setLoadingSets] = useState(true);
   const [errorSets, setErrorSets] = useState<string | null>(null);
-  const router = useRouter(); // Initialize router
+  const router = useRouter();
 
-  // --- Start: User Authentication and Data Fetching Logic ---
+  // --- Data Fetching Logic (Wrapped in useCallback) ---
+  const fetchFlashcardSets = useCallback(async () => {
+    try {
+      setLoadingSets(true);
+      setErrorSets(null);
+      const data = await api.flashcards.getSets();
+      // Ensure 'created_at' is treated as a string for Date constructor
+      const sortedSets = data.sort((a: FlashcardSet, b: FlashcardSet) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      setFlashcardSets(sortedSets.slice(0, 3));
+    } catch (err: unknown) { // Use unknown for error type
+      if (err instanceof Error) {
+        console.error('Failed to fetch flashcard sets:', err);
+        setErrorSets(err.message || 'Failed to load flashcard sets.');
+      } else {
+        console.error('Unexpected error fetching flashcard sets:', err);
+        setErrorSets('An unexpected error occurred while loading flashcard sets.');
+      }
+    } finally {
+      setLoadingSets(false);
+    }
+  }, []); // No dependencies for fetchFlashcardSets itself, as it doesn't use props/state directly
+
+  // --- User Authentication and Data Fetching Logic ---
   useEffect(() => {
-    let authListener: any = null; // Declare a variable for the auth listener
+    // Correctly type authListener
+     let authListener: { subscription: { unsubscribe: () => void } } | null = null; // <--- CORRECTED TYPE HERE
 
     const setupAuthAndFetch = async () => {
       const { data: { session }, error: getSessionError } = await supabase.auth.getSession();
@@ -40,11 +65,9 @@ export default function DashboardPage() {
       }
 
       setUserName(session.user.email || 'User');
-      fetchFlashcardSets();
+      fetchFlashcardSets(); // Call the memoized function
     };
 
-    // Listen for auth state changes
-    // Destructure the subscription object directly here for clarity
     const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth event:', event);
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -59,59 +82,40 @@ export default function DashboardPage() {
       }
     });
 
-    // Assign the data object to authListener for cleanup
-    authListener = data;
+    authListener = data; // Assign the data object (which contains the subscription)
 
-    setupAuthAndFetch(); // Run on component mount
+    setupAuthAndFetch();
 
-    // Cleanup the listener on component unmount
-    return () => {
-      // Correctly access the unsubscribe method on the subscription object
-      if (authListener && authListener.subscription) { // Check for authListener.subscription
-        authListener.subscription.unsubscribe(); // <--- CORRECTED LINE
+     return () => {
+      // Access subscription directly from authListener
+      if (authListener && authListener.subscription) { // <--- CORRECTED ACCESS HERE
+        authListener.subscription.unsubscribe();
       }
     };
-  }, []); // Run once on component mount
-
-  const fetchFlashcardSets = async () => {
-    try {
-      setLoadingSets(true);
-      setErrorSets(null);
-      const data = await api.flashcards.getSets();
-      const sortedSets = data.sort((a: FlashcardSet, b: FlashcardSet) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-      setFlashcardSets(sortedSets.slice(0, 3));
-    } catch (err: any) {
-      console.error('Failed to fetch flashcard sets:', err);
-      setErrorSets(err.message || 'Failed to load flashcard sets.');
-    } finally {
-      setLoadingSets(false);
-    }
-  };
-  // --- End: User Authentication and Data Fetching Logic ---
-
+  }, [router, fetchFlashcardSets]); // <-- Add router and fetchFlashcardSets to dependencies
 
   // --- Logout Functionality ---
   const handleSignOut = async () => {
     try {
-      setLoadingSets(true); // Can use a separate loading state for logout
+      setLoadingSets(true);
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) {
         console.error('Error signing out:', signOutError.message);
         setErrorSets(signOutError.message);
       } else {
-        router.push('/login'); // Redirect to login page after successful sign out
+        router.push('/login');
       }
-    } catch (err: any) {
+    } catch (err: unknown) { // Use unknown for error type
       console.error('Unexpected error during sign out:', err);
-      setErrorSets('An unexpected error occurred during sign out.');
+      if (err instanceof Error) {
+        setErrorSets(err.message || 'An unexpected error occurred during sign out.');
+      } else {
+        setErrorSets('An unexpected error occurred during sign out.');
+      }
     } finally {
       setLoadingSets(false);
     }
   };
-  // --- End: Logout Functionality ---
-
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -125,9 +129,9 @@ export default function DashboardPage() {
               Create New Flashcard Set
             </Link>
             <button
-              onClick={handleSignOut} // Use the new logout function
+              onClick={handleSignOut}
               className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
-              disabled={loadingSets} // Disable button while loading (e.g. during logout)
+              disabled={loadingSets}
             >
               Sign Out
             </button>
@@ -143,7 +147,6 @@ export default function DashboardPage() {
       <section className="mb-8">
         <h2 className="text-2xl font-semibold mb-4">Your Progress at a Glance</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* These will remain placeholders until backend endpoints are available */}
           <div className="bg-white p-6 rounded-lg shadow-md">
             <h3 className="text-xl font-bold text-gray-800">7 Days Streak</h3>
             <p className="text-gray-600 mt-2">Continue your learning</p>
