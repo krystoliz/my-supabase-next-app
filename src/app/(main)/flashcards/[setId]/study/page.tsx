@@ -196,7 +196,7 @@ export default function StudyModePage() {
         style={{
           transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
           backfaceVisibility: 'hidden',
-          transition: 'transform 0.6s'
+          transition: 'transform 2s'
         }}
       >
         <div className="relative w-full h-full flex items-center justify-center">

@@ -24,82 +24,85 @@ async function fetchWithAuth(endpoint: string, options?: RequestInit) {
     headers,
   });
 
-   // --- MODIFIED LOGIC BELOW ---
-
-  // For 204 No Content, no body is expected, so return null or an empty object directly
   if (response.status === 204) {
-    return null; 
+    return null;
   }
 
-  // Check if response has a body and is JSON before parsing
   const contentType = response.headers.get('content-type');
   const isJson = contentType && contentType.includes('application/json');
 
   let responseData;
   try {
-    // Only attempt to parse as JSON if it's JSON content type and not 204
     if (isJson) {
       responseData = await response.json();
     } else {
-      // For non-JSON responses (e.g., plain text errors), read as text
       responseData = await response.text();
     }
   } catch (parseError) {
-    // Handle cases where response is not empty but also not parseable as JSON
     console.error('Error parsing response body:', parseError, 'Response text:', await response.text());
     throw new Error(`Failed to parse response from server. Status: ${response.status}`);
   }
 
   if (!response.ok) {
-    // If response is not OK, throw an error with the response data
     throw new Error(responseData.error || responseData || `API call failed with status ${response.status}`);
   }
 
-  return responseData; // Return the parsed data (or text if non-JSON)
+  return responseData;
 }
 
-  
 // Define API calls for flashcards
 export const api = {
   flashcards: {
-    getSets: async () => fetchWithAuth('/api/flashcards'), // Corresponds to GET /api/flashcards
-    // Add other flashcard API calls here as needed
-    // --- NEW API FUNCTIONS BELOW ---
-    getCardsInSet: async (setId: string) => // Corresponds to GET /api/flashcards/:setId/cards
+    getSets: async () => fetchWithAuth('/api/flashcards'),
+
+    // --- ENSURE THIS NEW API FUNCTION IS PRESENT AND CORRECT ---
+    getSetById: async (setId: string) => // Corresponds to GET /api/flashcards/:setId
+      fetchWithAuth(`/api/flashcards/${setId}`),
+    // --- END NEW API FUNCTION ---
+
+    getCardsInSet: async (setId: string) =>
       fetchWithAuth(`/api/flashcards/${setId}/cards`),
 
-    createFlashcard: async (setId: string, question: string, answer: string) => // Corresponds to POST /api/flashcards/:setId/cards
+    createFlashcard: async (setId: string, question: string, answer: string) =>
       fetchWithAuth(`/api/flashcards/${setId}/cards`, {
         method: 'POST',
         body: JSON.stringify({ question, answer }),
       }),
-    // --- END NEW API FUNCTIONS ---
-    // --- NEW API FUNCTIONS BELOW ---
-    updateFlashcard: async (setId: string, cardId: string, updates: { question?: string; answer?: string }) => // Corresponds to PUT /api/flashcards/:setId/cards/:cardId
+
+    updateFlashcard: async (setId: string, cardId: string, updates: { question?: string; answer?: string }) =>
       fetchWithAuth(`/api/flashcards/${setId}/cards/${cardId}`, {
         method: 'PUT',
         body: JSON.stringify(updates),
       }),
 
-    deleteFlashcard: async (setId: string, cardId: string) => // Corresponds to DELETE /api/flashcards/:setId/cards/:cardId
+    deleteFlashcard: async (setId: string, cardId: string) =>
       fetchWithAuth(`/api/flashcards/${setId}/cards/${cardId}`, {
         method: 'DELETE',
       }),
-    // --- END NEW API FUNCTIONS ---
+
+    createFlashcardSet: async (title: string, description: string, visibility: 'private' | 'public') =>
+      fetchWithAuth('/api/flashcards', {
+        method: 'POST',
+        body: JSON.stringify({ title, description, visibility }),
+      }),
+
+    // --- NEW API FUNCTION BELOW ---
+    updateFlashcardSet: async (setId: string, updates: { title?: string; description?: string; visibility?: 'private' | 'public' }) => // Corresponds to PUT /api/flashcards/:setId
+      fetchWithAuth(`/api/flashcards/${setId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      }),
+    // --- END NEW API FUNCTION ---
   },
 
-   // --- NEW API CATEGORY AND FUNCTIONS BELOW ---
   study: {
-    getReviewCards: async (setId: string) => // Corresponds to GET /api/study/:setId/review-cards
+    getReviewCards: async (setId: string) =>
       fetchWithAuth(`/api/study/${setId}/review-cards`),
 
-    recordReview: async (flashcard_id: string, quality_of_response: number) => // Corresponds to POST /api/study/record-review
+    recordReview: async (flashcard_id: string, quality_of_response: number) =>
       fetchWithAuth(`/api/study/record-review`, {
         method: 'POST',
         body: JSON.stringify({ flashcard_id, quality_of_response }),
       }),
   },
-  // --- END NEW API CATEGORY AND FUNCTIONS ---
-  
-  // Add other API categories (e.g., users, study) here
 };

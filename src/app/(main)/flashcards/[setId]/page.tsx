@@ -232,9 +232,12 @@ export default function FlashcardSetDetailPage() {
         <Link href={`/flashcards/${setId}/study`} className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
           Start Study Session
         </Link>
-        <button className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors">
+        <Link
+          href={`/flashcards/${setId}/edit`}
+          className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+        >
           Edit Set
-        </button>
+        </Link>
       </div>
 
       {/* Add New Flashcard Form */}
